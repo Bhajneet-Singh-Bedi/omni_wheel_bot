@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+    <world name="default">
+
+        <model name="sun">
+            <static>true</static>
+            <link name="link">
+                <light type="directional" name="sun_light">
+                    <cast_shadows>true</cast_shadows>
+                    <diffuse>1 1 1 1</diffuse>
+                    <specular>0.1 0.1 0.1 1</specular>
+                    <attenuation>
+                        <range>1000</range>
+                        <constant>0.9</constant>
+                        <linear>0.01</linear>
+                        <quadratic>0.001</quadratic>
+                    </attenuation>
+                    <direction>-0.5 0.5 -1</direction>
+                </light>
+            </link>
+        </model>
+
+        <model name="ground_plane">
+            <static>true</static>
+            <link name="link">
+                <collision name="collision">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                            <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <surface>
+                        <friction>
+                            <ode>
+                                <mu>1</mu>
+                                <mu2>1</mu2>
+                            </ode>
+                        </friction>
+                        <bounce>
+                            <restitution_coefficient>0</restitution_coefficient>
+                            <threshold>1e+06</threshold>
+                        </bounce>
+                        <contact>
+                            <ode />
+                        </contact>
+                    </surface>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                            <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <material>
+                        <script>
+                            <uri>file://media/materials/scripts/gazebo.material</uri>
+                            <name>Gazebo/Grey</name>
+                        </script>
+                    </material>
+                </visual>
+            </link>
+        </model>
+    </world>
+</sdf>
