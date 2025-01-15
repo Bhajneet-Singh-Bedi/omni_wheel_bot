@@ -89,6 +89,21 @@ def generate_launch_description():
                "-z",
                default_z,
             ]
+        ),
+
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            parameters=[
+                {'robot_description': xacro.process_file(xacro_file).toxml()}
+            ]
+        ),
+
+        Node(
+            package='joint_state_publisher',
+            executable='joint_state_publisher',
+            name='joint_state_publisher'
         )
 
     ])
