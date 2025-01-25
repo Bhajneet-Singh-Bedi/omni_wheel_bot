@@ -22,8 +22,6 @@ def generate_launch_description():
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     pkg_omni_wheel_bot = get_package_share_directory('omni_wheel_bot')
 
-    gz_launch_path = PathJoinSubstitution([pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py'])
-    gz_model_path = PathJoinSubstitution([pkg_omni_wheel_bot, 'models'])
     xacro_file = os.path.join(get_package_share_directory('omni_wheel_bot'), 'urdf', 'omni_wheel_bot.urdf.xacro')  
     assert os.path.exists(xacro_file), "The omni_wheel_bot.urdf.xacro doesnt exist in "+str(xacro_file)  
 
@@ -35,75 +33,67 @@ def generate_launch_description():
     default_y = '0.0'
     default_z = '0.0'
 
+    rviz_launch_arg = DeclareLaunchArgument(
+        'rviz', default_value='true',
+        description='Open RViz.'
+    )
 
-    return LaunchDescription([
-        # Argument for the world file
-        DeclareLaunchArgument(
-            'world',
-            default_value='gazebo',
-            description='World to load into Gazebo'
+
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py'),
         ),
-
-        # Set the world file configuration
-        SetLaunchConfiguration(
-            name='world_file',
-            value=[
-                LaunchConfiguration('world'),
-                TextSubstitution(text='.world')
-            ]
-        ),
-
-        # Set the Gazebo resource path
-        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', gz_model_path),
-
-        # Include the Gazebo launch file
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(gz_launch_path),
-            launch_arguments={
+        launch_arguments={
                 'gz_args': [
-                    PathJoinSubstitution([pkg_omni_wheel_bot, 'worlds', LaunchConfiguration('world_file')])
+                    PathJoinSubstitution([pkg_omni_wheel_bot, 'worlds', 'gazebo.world'])
                 ],
                 'on_exit_shutdown': 'True'
             }.items(),
-        ),
+    )
 
-        # For spawning the robot
-        Node(
+    spawn = Node(
             package="ros_gz_sim",
             executable="create",
             name="ros_gz_create_bot",
             output="screen",
             arguments=[
-               "-file",
-               xacro_file,
-               "-param",
-               "robot_description",
-               "-name",
-               default_entity_name,
-               "-allow_renaming",
-               "true",
-               "-x",
-               default_x,
-               "-y",
-               default_y,
-               "-z",
-               default_z,
+               "-file", xacro_file,
+               "-param", "robot_description",
+               "-name", default_entity_name,
+               "-allow_renaming", "true",
+               "-x", default_x,
+               "-y", default_y,
+               "-z", default_z
             ]
-        ),
+    )
 
-        Node(
-            package='robot_state_publisher',
-            executable='robot_state_publisher',
-            name='robot_state_publisher',
-            parameters=[
-                {'robot_description': xacro.process_file(xacro_file).toxml()}
-            ]
-        ),
+    robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='both',
+        parameters=[
+            {'use_sim_time': True},
+            {'robot_description': xacro.process_file(xacro_file).toxml()}
+        ]
+    )
 
-        Node(
-            package='joint_state_publisher',
-            executable='joint_state_publisher',
-            name='joint_state_publisher'
-        )
-
+    joint_state_publisher = Node(
+        package='joint_state_publisher',
+        executable='joint_state_publisher',
+        name='joint_state_publisher',
+        output='both',
+        parameters=[
+            {'use_sim_time': True},
+            {'source_list': ['joint_state_publisher']}
+        ]
+    )
+    return LaunchDescription([
+        rviz_launch_arg,
+        gazebo,
+        spawn,
+        robot_state_publisher,
+        joint_state_publisher
     ])
+
+    
