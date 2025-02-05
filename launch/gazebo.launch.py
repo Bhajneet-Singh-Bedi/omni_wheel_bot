@@ -4,9 +4,10 @@ from launch.actions import (
     DeclareLaunchArgument, 
     SetEnvironmentVariable, 
     IncludeLaunchDescription, 
-    SetLaunchConfiguration,
+    RegisterEventHandler,
     ExecuteProcess
 )
+from launch.event_handlers import OnProcessExit
 from launch.substitutions import (
     PathJoinSubstitution, 
     LaunchConfiguration, 
@@ -21,9 +22,11 @@ import xacro
 def generate_launch_description():
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     pkg_omni_wheel_bot = get_package_share_directory('omni_wheel_bot')
+    use_sim_time = LaunchConfiguration('use_sim_time', default=True)
 
-    xacro_file = os.path.join(get_package_share_directory('omni_wheel_bot'), 'urdf', 'omni_wheel_bot.urdf.xacro')  
-    assert os.path.exists(xacro_file), "The omni_wheel_bot.urdf.xacro doesnt exist in "+str(xacro_file)  
+    urdf_file = os.path.join(get_package_share_directory('omni_wheel_bot'), 'urdf', 'omni_wheel_bot.urdf')  
+    assert os.path.exists(urdf_file), "The omni_wheel_bot.sdf doesnt exist in "+str(urdf_file)  
+    urdf = open(urdf_file).read()
 
 
 
@@ -33,11 +36,14 @@ def generate_launch_description():
     default_y = '0.0'
     default_z = '0.0'
 
-    rviz_launch_arg = DeclareLaunchArgument(
-        'rviz', default_value='true',
-        description='Open RViz.'
-    )
 
+    env_path = SetEnvironmentVariable( 'GZ_SIM_RESOURCE_PATH', os.path.join(pkg_omni_wheel_bot, 'meshes') )
+
+    DeclareLaunchArgument(
+            'use_sim_time',
+            default_value=use_sim_time,
+            description='If true, use simulated clock'),
+    
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -45,11 +51,12 @@ def generate_launch_description():
         ),
         launch_arguments={
                 'gz_args': [
-                    PathJoinSubstitution([pkg_omni_wheel_bot, 'worlds', 'gazebo.world'])
-                ],
+                    PathJoinSubstitution([pkg_omni_wheel_bot, 'worlds', 'gazebo.world']),
+                ' -r '],
                 'on_exit_shutdown': 'True'
             }.items(),
     )
+
 
     spawn = Node(
             package="ros_gz_sim",
@@ -57,7 +64,7 @@ def generate_launch_description():
             name="ros_gz_create_bot",
             output="screen",
             arguments=[
-               "-file", xacro_file,
+               "-file", urdf_file,
                "-param", "robot_description",
                "-name", default_entity_name,
                "-allow_renaming", "true",
@@ -74,7 +81,7 @@ def generate_launch_description():
         output='both',
         parameters=[
             {'use_sim_time': True},
-            {'robot_description': xacro.process_file(xacro_file).toxml()}
+            {'robot_description': urdf}
         ]
     )
 
@@ -83,17 +90,51 @@ def generate_launch_description():
         executable='joint_state_publisher',
         name='joint_state_publisher',
         output='both',
-        parameters=[
-            {'use_sim_time': True},
-            {'source_list': ['joint_state_publisher']}
-        ]
+        arguments=[urdf_file],
+    )
+
+    load_joint_state_broadcaster = ExecuteProcess(
+        cmd=['ros2', 'control', 'load_controller', '--set-state', 'active',
+             'joint_state_broadcaster'],
+        output='screen'
+    )
+
+    load_joint_trajectory_controller = ExecuteProcess(
+        cmd=['ros2', 'control', 'load_controller', '--set-state', 'active', 'velocity_controller'],
+        output='screen'
+    )
+
+    # Bridge
+    bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+        output='screen'
     )
     return LaunchDescription([
-        rviz_launch_arg,
+        # Launch gazebo environment
         gazebo,
-        spawn,
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=spawn,
+                on_exit=[load_joint_state_broadcaster],
+            )
+        ),
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=load_joint_state_broadcaster,
+                on_exit=[load_joint_trajectory_controller],
+            )
+        ),
+        
         robot_state_publisher,
-        joint_state_publisher
+        spawn,
+        # Launch Arguments
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value=use_sim_time,
+            description='If true, use simulated clock'),
+        bridge,
     ])
 
     
